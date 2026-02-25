@@ -1,0 +1,18 @@
+{
+  "config": {
+    // MD013 — line length is impractical for technical docs with long code, tables, and URLs
+    "MD013": false,
+
+    // MD033 — inline HTML is fine (e.g. <br> in tables)
+    "MD033": false,
+
+    // MD040 — many code blocks intentionally have no language (binary layouts, directory trees)
+    "MD040": false,
+
+    // MD060 — table column alignment is too strict for wide technical tables
+    "MD060": false,
+
+    // MD036 — bold text used as informal section labels in checklists is intentional
+    "MD036": false
+  }
+}
