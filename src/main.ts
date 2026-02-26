@@ -215,11 +215,19 @@ async function readbackGaussData(
     const id = data.getInt32(base + 0, true);
     const radii = data.getInt32(base + 4, true);
     const depth = data.getFloat32(base + 8, true);
+    const tiles = data.getUint32(base + 12, true);
     const uvX = data.getFloat32(base + 24, true);
     const uvY = data.getFloat32(base + 28, true);
+    const conicX = data.getFloat32(base + 32, true); // C/det
+    const conicY = data.getFloat32(base + 36, true); // -B/det
+    const conicZ = data.getFloat32(base + 40, true); // A/det
     const opacity = data.getFloat32(base + 60, true);
-    const status = radii === 0 ? 'culled' : 'visible';
-    html += `  [${id}] ${status}  depth=${depth.toFixed(3)}  uv=(${uvX.toFixed(3)},${uvY.toFixed(3)})  α=${opacity.toFixed(3)}\n`;
+    if (radii === 0) {
+      html += `  [${id}] culled\n`;
+    } else {
+      const f = (v: number) => v.toFixed(3);
+      html += `  [${id}] r=${radii}px  d=${f(depth)}  tiles=${tiles}  uv=(${f(uvX)},${f(uvY)})  conic=(${f(conicX)},${f(conicY)},${f(conicZ)})  α=${f(opacity)}\n`;
+    }
   }
 
   readBuf.unmap();
