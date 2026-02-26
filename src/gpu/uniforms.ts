@@ -117,12 +117,14 @@ export function mat4Perspective(
 ): Float32Array {
   const f = 1.0 / Math.tan(fovYRad / 2);
   const ri = 1.0 / (far - near);
+  // clip.w = -pos_view.z  (positive for objects in front, right-handed)
+  // NDC.z maps near→0, far→1
   // prettier-ignore
   return new Float32Array([
-    f / aspect,  0,  0,                0,   // col 0
-    0,           f,  0,                0,   // col 1
-    0,           0,  far * ri,         1,   // col 2  ← +1 copies z into w
-    0,           0, -near * far * ri,  0,   // col 3
+    f / aspect,  0,   0,                 0,   // col 0
+    0,           f,   0,                 0,   // col 1
+    0,           0,  -far * ri,         -1,   // col 2  ← -1 makes clip.w = -z (positive)
+    0,           0,  -near * far * ri,   0,   // col 3
   ]);
 }
 

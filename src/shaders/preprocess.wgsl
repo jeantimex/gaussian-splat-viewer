@@ -3,8 +3,9 @@
 //
 // Dispatch: ceil(numGaussians / 256) workgroups × 256 threads
 //
-// Pass 2b-i: struct definitions + entry point skeleton (all outputs zeroed).
-// Later passes will fill in covariance, EWA projection, culling, and color.
+// Pass 2b-ii: position transform + frustum cull + opacity cull.
+//   Right-handed view space: objects in front have pos_view.z < 0.
+//   clip.w = -pos_view.z  (positive for visible points).
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -63,14 +64,62 @@ struct GaussData {
 // Entry point (skeleton — all outputs zeroed, radii = 0 = culled)
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Helpers
+// -----------------------------------------------------------------------------
+
+fn sigmoid(x: f32) -> f32 {
+  return 1.0 / (1.0 + exp(-x));
+}
+
+// -----------------------------------------------------------------------------
+// Entry point
+// -----------------------------------------------------------------------------
+
 @compute @workgroup_size(256, 1, 1)
 fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>) {
   let idx = gid.x;
   if (idx >= uniforms.num_gaussians) { return; }
 
-  // Zero-initialise output — subsequent passes will fill real values.
   var out: GaussData;
   out.id    = i32(idx);
-  out.radii = 0; // marks as culled until fully computed
+  out.radii = 0; // culled by default
+
+  let gauss = gaussians[idx];
+
+  // ---- Transform to view space --------------------------------------------
+  let pos_view = uniforms.view_matrix * vec4<f32>(gauss.position, 1.0);
+
+  // Right-handed: z < 0 means in front of camera. Cull if too close/behind.
+  if (pos_view.z > -0.2) {
+    gauss_data[idx] = out;
+    return;
+  }
+
+  // ---- Opacity cull -------------------------------------------------------
+  let alpha = sigmoid(gauss.opacity);
+  if (alpha < 0.03) {
+    gauss_data[idx] = out;
+    return;
+  }
+
+  // ---- Clip space + perspective divide ------------------------------------
+  let pos_clip = uniforms.proj_matrix * pos_view;
+  let pos_ndc  = pos_clip.xyz / pos_clip.w; // clip.w = -pos_view.z > 0
+
+  // ---- Frustum cull (with a small border for partially-visible splats) ----
+  if (abs(pos_ndc.x) > 1.1 || abs(pos_ndc.y) > 1.1) {
+    gauss_data[idx] = out;
+    return;
+  }
+
+  // ---- Visible — fill basic output fields ---------------------------------
+  // depth: positive, smaller = closer to camera
+  out.depth   = -pos_view.z;
+  // uv: NDC [-1,1] → screen [0,1]; y is flipped (NDC +y = up, screen +y = down)
+  out.uv      = vec2<f32>(pos_ndc.x * 0.5 + 0.5, -pos_ndc.y * 0.5 + 0.5);
+  out.opacity = alpha;
+  out.radii   = 1; // placeholder — real pixel radius computed in 2b-iii
+
   gauss_data[idx] = out;
 }

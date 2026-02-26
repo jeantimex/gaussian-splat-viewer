@@ -149,6 +149,9 @@ async function handleFile(file: File) {
       const encoder = gpuDevice.createCommandEncoder();
       encodePreprocessPass(encoder, preprocessPass);
       gpuDevice.queue.submit([encoder.finish()]);
+
+      // Async readback — updates overlay once GPU finishes
+      readbackGaussData(gpuDevice, preprocessPass.gaussDataBuffer, scene.numGaussians);
     }
 
     showSceneInfo(scene, parseMs, bufferBytes);
@@ -177,6 +180,51 @@ function setupDragDrop() {
     const file = e.dataTransfer?.files?.[0];
     if (file) handleFile(file);
   });
+}
+
+// ---------------------------------------------------------------------------
+// GPU readback (verification only — removed in production)
+// ---------------------------------------------------------------------------
+
+const GAUSS_DATA_STRIDE = 64; // bytes, must match pipeline/preprocess.ts
+const READBACK_COUNT = 5;
+
+async function readbackGaussData(
+  device: GPUDevice,
+  srcBuffer: GPUBuffer,
+  numGaussians: number,
+): Promise<void> {
+  const count = Math.min(READBACK_COUNT, numGaussians);
+  const byteLen = count * GAUSS_DATA_STRIDE;
+
+  const readBuf = device.createBuffer({
+    size: byteLen,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+
+  const enc = device.createCommandEncoder();
+  enc.copyBufferToBuffer(srcBuffer, 0, readBuf, 0, byteLen);
+  device.queue.submit([enc.finish()]);
+
+  await readBuf.mapAsync(GPUMapMode.READ);
+  const data = new DataView(readBuf.getMappedRange());
+
+  let html = `\n<b>GaussData readback (first ${count}):</b>\n`;
+  for (let i = 0; i < count; i++) {
+    const base = i * GAUSS_DATA_STRIDE;
+    const id = data.getInt32(base + 0, true);
+    const radii = data.getInt32(base + 4, true);
+    const depth = data.getFloat32(base + 8, true);
+    const uvX = data.getFloat32(base + 24, true);
+    const uvY = data.getFloat32(base + 28, true);
+    const opacity = data.getFloat32(base + 60, true);
+    const status = radii === 0 ? 'culled' : 'visible';
+    html += `  [${id}] ${status}  depth=${depth.toFixed(3)}  uv=(${uvX.toFixed(3)},${uvY.toFixed(3)})  α=${opacity.toFixed(3)}\n`;
+  }
+
+  readBuf.unmap();
+  readBuf.destroy();
+  overlay.innerHTML += html;
 }
 
 // ---------------------------------------------------------------------------
