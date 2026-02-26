@@ -2,6 +2,13 @@ import './style.css';
 import { loadScene } from './loader/index.ts';
 import type { SceneData } from './loader/index.ts';
 import { createGaussianBuffer, GAUSSIAN_STRIDE } from './gpu/buffers.ts';
+import {
+  createUniformBuffer,
+  updateUniforms,
+  mat4Perspective,
+  mat4LookAt,
+  UNIFORMS_SIZE,
+} from './gpu/uniforms.ts';
 
 // ---------------------------------------------------------------------------
 // WebGPU init
@@ -12,6 +19,7 @@ const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 let gpuDevice: GPUDevice | null = null;
 let canvasFormat: GPUTextureFormat = 'bgra8unorm';
 let gpuContext: GPUCanvasContext | null = null;
+let uniformBuffer: GPUBuffer | null = null;
 
 async function initWebGPU() {
   if (!navigator.gpu) throw new Error('WebGPU is not supported in this browser.');
@@ -78,6 +86,7 @@ function showSceneInfo(scene: SceneData, parseMs: number, bufferBytes: number) {
     html += `<b>SH degree:</b> ${scene.shDegree}\n`;
     html += `<b>Parse time:</b> ${parseMs.toFixed(1)} ms\n`;
     html += `<b>GPU buffer:</b> ${(bufferBytes / 1024 / 1024).toFixed(1)} MB\n`;
+    html += `<b>Uniform buffer:</b> ${UNIFORMS_SIZE} bytes\n`;
     html += `<b>First positions:</b>\n`;
     for (let i = 0; i < Math.min(3, scene.numGaussians); i++) {
       html += `  [${i}] (${fmt(p[i * 3]!)}, ${fmt(p[i * 3 + 1]!)}, ${fmt(p[i * 3 + 2]!)})\n`;
@@ -150,6 +159,34 @@ function setupDragDrop() {
 }
 
 // ---------------------------------------------------------------------------
+// Camera helpers
+// ---------------------------------------------------------------------------
+
+/** Upload a simple look-at camera centred on the origin. Replaced in Phase 6. */
+function uploadPlaceholderCamera() {
+  if (!gpuDevice || !uniformBuffer) return;
+  const w = canvas.width || 1280;
+  const h = canvas.height || 720;
+  const fovY = (60 * Math.PI) / 180;
+  const tanHalfFovY = Math.tan(fovY / 2);
+  const tanHalfFovX = tanHalfFovY * (w / h);
+
+  updateUniforms(gpuDevice, uniformBuffer, {
+    viewMatrix: mat4LookAt([0, 0, 5], [0, 0, 0], [0, 1, 0]),
+    projMatrix: mat4Perspective(fovY, w / h, 0.1, 100),
+    cameraPos: [0, 0, 5],
+    tanHalfFovX,
+    tanHalfFovY,
+    focalX: w / (2 * tanHalfFovX),
+    focalY: h / (2 * tanHalfFovY),
+    scaleModifier: 1.0,
+    screenWidth: w,
+    screenHeight: h,
+    numGaussians: 0,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
@@ -163,6 +200,11 @@ async function init() {
 
   resize();
   window.addEventListener('resize', resize);
+
+  // Allocate uniform buffer and upload a placeholder camera
+  uniformBuffer = createUniformBuffer(gpuDevice!);
+  uploadPlaceholderCamera();
+
   setupDragDrop();
   requestAnimationFrame(frame);
 }
