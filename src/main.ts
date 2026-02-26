@@ -221,12 +221,17 @@ async function readbackGaussData(
     const conicX = data.getFloat32(base + 32, true); // C/det
     const conicY = data.getFloat32(base + 36, true); // -B/det
     const conicZ = data.getFloat32(base + 40, true); // A/det
+    const colorR = data.getFloat32(base + 48, true);
+    const colorG = data.getFloat32(base + 52, true);
+    const colorB = data.getFloat32(base + 56, true);
     const opacity = data.getFloat32(base + 60, true);
     if (radii === 0) {
       html += `  [${id}] culled\n`;
     } else {
       const f = (v: number) => v.toFixed(3);
-      html += `  [${id}] r=${radii}px  d=${f(depth)}  tiles=${tiles}  uv=(${f(uvX)},${f(uvY)})  conic=(${f(conicX)},${f(conicY)},${f(conicZ)})  α=${f(opacity)}\n`;
+      const c = (v: number) => Math.round(v * 255);
+      html += `  [${id}] r=${radii}px  d=${f(depth)}  tiles=${tiles}  uv=(${f(uvX)},${f(uvY)})\n`;
+      html += `       conic=(${f(conicX)},${f(conicY)},${f(conicZ)})  rgb=(${c(colorR)},${c(colorG)},${c(colorB)})  α=${f(opacity)}\n`;
     }
   }
 

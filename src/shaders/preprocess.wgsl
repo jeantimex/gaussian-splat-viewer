@@ -181,10 +181,16 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>) {
     return;
   }
 
-  out.radii = i32(radius_px);
-  out.depth = -pos_view.z;
-  out.uv    = vec2<f32>(pos_ndc.x * 0.5 + 0.5, -pos_ndc.y * 0.5 + 0.5);
+  out.radii   = i32(radius_px);
+  out.depth   = -pos_view.z;
+  out.uv      = vec2<f32>(pos_ndc.x * 0.5 + 0.5, -pos_ndc.y * 0.5 + 0.5);
   out.opacity = alpha;
+
+  // ---- SH degree-0 color (DC term only) -----------------------------------
+  // color = clamp(SH_C0 * sh_dc + 0.5, 0, 1)
+  let SH_C0 = 0.28209479177387814;
+  let sh_dc = vec3<f32>(gauss.sh_dc_r, gauss.sh_dc_g, gauss.sh_dc_b);
+  out.color = clamp(SH_C0 * sh_dc + vec3<f32>(0.5), vec3<f32>(0.0), vec3<f32>(1.0));
 
   // ---- Tile overlap count (used by Phase 3 prefix sum) --------------------
   let px    = out.uv * vec2<f32>(uniforms.screen_size);
