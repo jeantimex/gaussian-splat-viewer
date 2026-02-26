@@ -15,6 +15,11 @@ import {
   type PreprocessPass,
 } from './pipeline/preprocess.ts';
 import { runPrefixSum } from './pipeline/prefix-sum.ts';
+import {
+  createTileKeyPass,
+  encodeTileKeyPass,
+  type TileKeyPass,
+} from './pipeline/tile-depth-key.ts';
 
 // ---------------------------------------------------------------------------
 // WebGPU init
@@ -27,6 +32,7 @@ let canvasFormat: GPUTextureFormat = 'bgra8unorm';
 let gpuContext: GPUCanvasContext | null = null;
 let uniformBuffer: GPUBuffer | null = null;
 let preprocessPass: PreprocessPass | null = null;
+let tileKeyPass: TileKeyPass | null = null;
 
 async function initWebGPU() {
   if (!navigator.gpu) throw new Error('WebGPU is not supported in this browser.');
@@ -164,6 +170,24 @@ async function handleFile(file: File) {
         scene.numGaussians,
       );
 
+      // Build and run tile-depth key expansion pass.
+      tileKeyPass?.keysHiBuffer.destroy();
+      tileKeyPass?.keysLoBuffer.destroy();
+      tileKeyPass?.valuesBuffer.destroy();
+      tileKeyPass = createTileKeyPass(
+        gpuDevice,
+        preprocessPass.gaussDataBuffer,
+        preprocessPass.tilesBuffer,
+        scene.numGaussians,
+        totalIntersections,
+        canvas.width,
+        canvas.height,
+      );
+
+      const enc2 = gpuDevice.createCommandEncoder();
+      encodeTileKeyPass(enc2, tileKeyPass);
+      gpuDevice.queue.submit([enc2.finish()]);
+
       // Async readback — updates overlay once GPU finishes
       readbackGaussData(
         gpuDevice,
@@ -171,6 +195,7 @@ async function handleFile(file: File) {
         preprocessPass.tilesBuffer,
         scene.numGaussians,
         totalIntersections,
+        tileKeyPass,
       );
     }
 
@@ -215,6 +240,7 @@ async function readbackGaussData(
   tilesBuffer: GPUBuffer,
   numGaussians: number,
   totalIntersections: number,
+  tkPass: TileKeyPass,
 ): Promise<void> {
   const count = Math.min(READBACK_COUNT, numGaussians);
   const byteLen = count * GAUSS_DATA_STRIDE;
@@ -272,6 +298,53 @@ async function readbackGaussData(
   tilesReadBuf.unmap();
   gaussReadBuf.destroy();
   tilesReadBuf.destroy();
+
+  // ---- Tile-key readback ---------------------------------------------------
+  const TK_COUNT = 8;
+  if (totalIntersections > 0) {
+    const tkLen = Math.min(TK_COUNT, totalIntersections) * 4;
+    const hiReadBuf = device.createBuffer({
+      size: tkLen,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const loReadBuf = device.createBuffer({
+      size: tkLen,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    const valReadBuf = device.createBuffer({
+      size: tkLen,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+
+    const enc3 = device.createCommandEncoder();
+    enc3.copyBufferToBuffer(tkPass.keysHiBuffer, 0, hiReadBuf, 0, tkLen);
+    enc3.copyBufferToBuffer(tkPass.keysLoBuffer, 0, loReadBuf, 0, tkLen);
+    enc3.copyBufferToBuffer(tkPass.valuesBuffer, 0, valReadBuf, 0, tkLen);
+    device.queue.submit([enc3.finish()]);
+
+    await hiReadBuf.mapAsync(GPUMapMode.READ);
+    await loReadBuf.mapAsync(GPUMapMode.READ);
+    await valReadBuf.mapAsync(GPUMapMode.READ);
+
+    const hi = new Uint32Array(hiReadBuf.getMappedRange());
+    const lo = new Uint32Array(loReadBuf.getMappedRange());
+    const val = new Uint32Array(valReadBuf.getMappedRange());
+
+    const tkCount = Math.min(TK_COUNT, totalIntersections);
+    html += `\n<b>Tile-key entries (first ${tkCount}):</b>\n`;
+    for (let i = 0; i < tkCount; i++) {
+      const depth = new DataView(lo.buffer, lo.byteOffset + i * 4, 4).getFloat32(0, true);
+      html += `  [${i}] tile=${hi[i]}  depth=${depth.toFixed(3)}  gauss=${val[i]}\n`;
+    }
+
+    hiReadBuf.unmap();
+    loReadBuf.unmap();
+    valReadBuf.unmap();
+    hiReadBuf.destroy();
+    loReadBuf.destroy();
+    valReadBuf.destroy();
+  }
+
   overlay.innerHTML += html;
 }
 
