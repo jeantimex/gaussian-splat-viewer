@@ -14,6 +14,7 @@ import {
   encodePreprocessPass,
   type PreprocessPass,
 } from './pipeline/preprocess.ts';
+import { runPrefixSum } from './pipeline/prefix-sum.ts';
 
 // ---------------------------------------------------------------------------
 // WebGPU init
@@ -33,7 +34,12 @@ async function initWebGPU() {
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) throw new Error('No WebGPU adapter found.');
 
-  gpuDevice = await adapter.requestDevice();
+  gpuDevice = await adapter.requestDevice({
+    requiredLimits: {
+      maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+      maxBufferSize: adapter.limits.maxBufferSize,
+    },
+  });
   gpuContext = canvas.getContext('webgpu') as GPUCanvasContext;
   canvasFormat = navigator.gpu.getPreferredCanvasFormat();
   gpuContext.configure({ device: gpuDevice, format: canvasFormat });
@@ -150,8 +156,22 @@ async function handleFile(file: File) {
       encodePreprocessPass(encoder, preprocessPass);
       gpuDevice.queue.submit([encoder.finish()]);
 
+      // Run prefix sum on tiles_flat — writes cum_tiles_touched in-place.
+      // Returns total number of tile-Gaussian intersections.
+      const totalIntersections = await runPrefixSum(
+        gpuDevice,
+        preprocessPass.tilesBuffer,
+        scene.numGaussians,
+      );
+
       // Async readback — updates overlay once GPU finishes
-      readbackGaussData(gpuDevice, preprocessPass.gaussDataBuffer, scene.numGaussians);
+      readbackGaussData(
+        gpuDevice,
+        preprocessPass.gaussDataBuffer,
+        preprocessPass.tilesBuffer,
+        scene.numGaussians,
+        totalIntersections,
+      );
     }
 
     showSceneInfo(scene, parseMs, bufferBytes);
@@ -192,24 +212,36 @@ const READBACK_COUNT = 5;
 async function readbackGaussData(
   device: GPUDevice,
   srcBuffer: GPUBuffer,
+  tilesBuffer: GPUBuffer,
   numGaussians: number,
+  totalIntersections: number,
 ): Promise<void> {
   const count = Math.min(READBACK_COUNT, numGaussians);
   const byteLen = count * GAUSS_DATA_STRIDE;
+  const tilesByteLen = count * 4;
 
-  const readBuf = device.createBuffer({
+  const gaussReadBuf = device.createBuffer({
     size: byteLen,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+  const tilesReadBuf = device.createBuffer({
+    size: tilesByteLen,
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
   });
 
   const enc = device.createCommandEncoder();
-  enc.copyBufferToBuffer(srcBuffer, 0, readBuf, 0, byteLen);
+  enc.copyBufferToBuffer(srcBuffer, 0, gaussReadBuf, 0, byteLen);
+  enc.copyBufferToBuffer(tilesBuffer, 0, tilesReadBuf, 0, tilesByteLen);
   device.queue.submit([enc.finish()]);
 
-  await readBuf.mapAsync(GPUMapMode.READ);
-  const data = new DataView(readBuf.getMappedRange());
+  await gaussReadBuf.mapAsync(GPUMapMode.READ);
+  await tilesReadBuf.mapAsync(GPUMapMode.READ);
 
-  let html = `\n<b>GaussData readback (first ${count}):</b>\n`;
+  const data = new DataView(gaussReadBuf.getMappedRange());
+  const cumTiles = new Uint32Array(tilesReadBuf.getMappedRange());
+
+  let html = `\n<b>Prefix sum total intersections: ${totalIntersections.toLocaleString()}</b>\n`;
+  html += `<b>GaussData readback (first ${count}):</b>\n`;
   for (let i = 0; i < count; i++) {
     const base = i * GAUSS_DATA_STRIDE;
     const id = data.getInt32(base + 0, true);
@@ -225,18 +257,21 @@ async function readbackGaussData(
     const colorG = data.getFloat32(base + 52, true);
     const colorB = data.getFloat32(base + 56, true);
     const opacity = data.getFloat32(base + 60, true);
+    const cum = cumTiles[i]!;
     if (radii === 0) {
-      html += `  [${id}] culled\n`;
+      html += `  [${id}] culled  cum=${cum}\n`;
     } else {
       const f = (v: number) => v.toFixed(3);
       const c = (v: number) => Math.round(v * 255);
-      html += `  [${id}] r=${radii}px  d=${f(depth)}  tiles=${tiles}  uv=(${f(uvX)},${f(uvY)})\n`;
+      html += `  [${id}] r=${radii}px  d=${f(depth)}  tiles=${tiles}  cum=${cum}  uv=(${f(uvX)},${f(uvY)})\n`;
       html += `       conic=(${f(conicX)},${f(conicY)},${f(conicZ)})  rgb=(${c(colorR)},${c(colorG)},${c(colorB)})  α=${f(opacity)}\n`;
     }
   }
 
-  readBuf.unmap();
-  readBuf.destroy();
+  gaussReadBuf.unmap();
+  tilesReadBuf.unmap();
+  gaussReadBuf.destroy();
+  tilesReadBuf.destroy();
   overlay.innerHTML += html;
 }
 

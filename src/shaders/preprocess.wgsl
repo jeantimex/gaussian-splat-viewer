@@ -56,9 +56,10 @@ struct GaussData {
   opacity:           f32,       // offset 60   sigmoid(logit)
 }                               // total: 64 bytes
 
-@group(0) @binding(0) var<uniform>             uniforms:   Uniforms;
-@group(0) @binding(1) var<storage, read>       gaussians:  array<GaussianInput>;
-@group(0) @binding(2) var<storage, read_write> gauss_data: array<GaussData>;
+@group(0) @binding(0) var<uniform>             uniforms:    Uniforms;
+@group(0) @binding(1) var<storage, read>       gaussians:   array<GaussianInput>;
+@group(0) @binding(2) var<storage, read_write> gauss_data:  array<GaussData>;
+@group(0) @binding(3) var<storage, read_write> tiles_flat:  array<u32>;
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -203,4 +204,5 @@ fn preprocess(@builtin(global_invocation_id) gid: vec3<u32>) {
   out.tiles_touched = u32(n_tiles);
 
   gauss_data[idx] = out;
+  tiles_flat[idx] = out.tiles_touched;
 }

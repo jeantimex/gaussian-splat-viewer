@@ -14,6 +14,7 @@ export interface PreprocessPass {
   pipeline: GPUComputePipeline;
   bindGroup: GPUBindGroup;
   gaussDataBuffer: GPUBuffer; // output: array<GaussData>
+  tilesBuffer: GPUBuffer; // output: flat u32 tiles_touched per Gaussian
   numGaussians: number;
 }
 
@@ -37,11 +38,19 @@ export function createPreprocessPass(
     code: shaderCode,
   });
 
-  // ---- Output buffer -------------------------------------------------------
+  // ---- Output buffers ------------------------------------------------------
   const gaussDataBuffer = device.createBuffer({
     label: 'gauss-data',
     size: numGaussians * GAUSS_DATA_STRIDE,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+  });
+
+  // Flat u32 tiles_touched array — input to the prefix sum pass.
+  // COPY_SRC so prefix-sum.ts can read it; COPY_DST so prefix-sum.ts can zero it if needed.
+  const tilesBuffer = device.createBuffer({
+    label: 'tiles-flat',
+    size: numGaussians * 4,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
   });
 
   // ---- Bind group layout (explicit, so we can inspect it) ------------------
@@ -51,6 +60,7 @@ export function createPreprocessPass(
       { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
     ],
   });
 
@@ -61,6 +71,7 @@ export function createPreprocessPass(
       { binding: 0, resource: { buffer: uniformBuffer } },
       { binding: 1, resource: { buffer: gaussianBuffer } },
       { binding: 2, resource: { buffer: gaussDataBuffer } },
+      { binding: 3, resource: { buffer: tilesBuffer } },
     ],
   });
 
@@ -71,7 +82,7 @@ export function createPreprocessPass(
     compute: { module: shaderModule, entryPoint: 'preprocess' },
   });
 
-  return { pipeline, bindGroup, gaussDataBuffer, numGaussians };
+  return { pipeline, bindGroup, gaussDataBuffer, tilesBuffer, numGaussians };
 }
 
 /**
