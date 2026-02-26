@@ -5,23 +5,27 @@ import type { GaussianSceneData, PointCloudSceneData } from './types.ts';
 // ---------------------------------------------------------------------------
 
 interface PropInfo {
-  name:   string;
-  type:   string;
+  name: string;
+  type: string;
   offset: number; // byte offset within one vertex row
 }
 
 interface PLYHeader {
   numVertices: number;
-  stride:      number;
-  props:       PropInfo[];
-  dataOffset:  number; // byte offset in the full buffer where vertex data begins
+  stride: number;
+  props: PropInfo[];
+  dataOffset: number; // byte offset in the full buffer where vertex data begins
 }
 
 const TYPE_SIZES: Record<string, number> = {
-  double: 8, float: 4,
-  int: 4, uint: 4,
-  short: 2, ushort: 2,
-  char: 1, uchar: 1,
+  double: 8,
+  float: 4,
+  int: 4,
+  uint: 4,
+  short: 2,
+  ushort: 2,
+  char: 1,
+  uchar: 1,
 };
 
 function parsePLYHeader(buffer: ArrayBuffer): PLYHeader {
@@ -68,14 +72,22 @@ function makeReader(
   if (!prop) return () => 0;
   const { offset, type } = prop;
   switch (type) {
-    case 'float':  return (i) => view.getFloat32(i * stride + offset, true);
-    case 'double': return (i) => view.getFloat64(i * stride + offset, true);
-    case 'int':    return (i) => view.getInt32(i * stride + offset, true);
-    case 'uint':   return (i) => view.getUint32(i * stride + offset, true);
-    case 'short':  return (i) => view.getInt16(i * stride + offset, true);
-    case 'ushort': return (i) => view.getUint16(i * stride + offset, true);
-    case 'uchar':  return (i) => view.getUint8(i * stride + offset);
-    default:       return () => 0;
+    case 'float':
+      return (i) => view.getFloat32(i * stride + offset, true);
+    case 'double':
+      return (i) => view.getFloat64(i * stride + offset, true);
+    case 'int':
+      return (i) => view.getInt32(i * stride + offset, true);
+    case 'uint':
+      return (i) => view.getUint32(i * stride + offset, true);
+    case 'short':
+      return (i) => view.getInt16(i * stride + offset, true);
+    case 'ushort':
+      return (i) => view.getUint16(i * stride + offset, true);
+    case 'uchar':
+      return (i) => view.getUint8(i * stride + offset);
+    default:
+      return () => 0;
   }
 }
 
@@ -103,9 +115,9 @@ export function parseGaussianPLY(buffer: ArrayBuffer): GaussianSceneData {
   const find = (name: string) => props.find((p) => p.name === name);
 
   // Build fast per-property readers
-  const rx  = makeReader(view, stride, find('x'));
-  const ry  = makeReader(view, stride, find('y'));
-  const rz  = makeReader(view, stride, find('z'));
+  const rx = makeReader(view, stride, find('x'));
+  const ry = makeReader(view, stride, find('y'));
+  const rz = makeReader(view, stride, find('z'));
   const rs0 = makeReader(view, stride, find('scale_0'));
   const rs1 = makeReader(view, stride, find('scale_1'));
   const rs2 = makeReader(view, stride, find('scale_2'));
@@ -130,8 +142,8 @@ export function parseGaussianPLY(buffer: ArrayBuffer): GaussianSceneData {
   const logScales = new Float32Array(N * 3);
   const rotations = new Float32Array(N * 4);
   const opacities = new Float32Array(N);
-  const shDC      = new Float32Array(N * 3);
-  const shRest    = new Float32Array(restProps.length > 0 ? N * restProps.length : 0);
+  const shDC = new Float32Array(N * 3);
+  const shRest = new Float32Array(restProps.length > 0 ? N * restProps.length : 0);
 
   for (let i = 0; i < N; i++) {
     positions[i * 3 + 0] = rx(i);
@@ -159,7 +171,17 @@ export function parseGaussianPLY(buffer: ArrayBuffer): GaussianSceneData {
     }
   }
 
-  return { kind: 'gaussian', numGaussians: N, positions, logScales, rotations, opacities, shDC, shRest, shDegree };
+  return {
+    kind: 'gaussian',
+    numGaussians: N,
+    positions,
+    logScales,
+    rotations,
+    opacities,
+    shDC,
+    shRest,
+    shDegree,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -178,9 +200,9 @@ export function parsePointCloudPLY(buffer: ArrayBuffer): PointCloudSceneData {
   const rz = makeReader(view, stride, find('z'));
 
   // Color — accept 'red/green/blue' or 'r/g/b'
-  const rr = makeReader(view, stride, find('red')   ?? find('r'));
+  const rr = makeReader(view, stride, find('red') ?? find('r'));
   const rg = makeReader(view, stride, find('green') ?? find('g'));
-  const rb = makeReader(view, stride, find('blue')  ?? find('b'));
+  const rb = makeReader(view, stride, find('blue') ?? find('b'));
   const hasColor = !!(find('red') ?? find('r'));
 
   const rnx = makeReader(view, stride, find('nx'));
@@ -189,8 +211,8 @@ export function parsePointCloudPLY(buffer: ArrayBuffer): PointCloudSceneData {
   const hasNormals = !!find('nx');
 
   const positions = new Float32Array(N * 3);
-  const colors    = hasColor   ? new Uint8Array(N * 3)   : new Uint8Array(0);
-  const normals   = hasNormals ? new Float32Array(N * 3) : new Float32Array(0);
+  const colors = hasColor ? new Uint8Array(N * 3) : new Uint8Array(0);
+  const normals = hasNormals ? new Float32Array(N * 3) : new Float32Array(0);
 
   for (let i = 0; i < N; i++) {
     positions[i * 3 + 0] = rx(i);

@@ -41,8 +41,8 @@ export function packGaussianBuffer(data: GaussianSceneData): Float32Array {
     packed[base + 7] = 0; // padding
 
     // offset 32 (f32 index  8): rotation wxyz
-    packed[base +  8] = rotations[i * 4 + 0]!;
-    packed[base +  9] = rotations[i * 4 + 1]!;
+    packed[base + 8] = rotations[i * 4 + 0]!;
+    packed[base + 9] = rotations[i * 4 + 1]!;
     packed[base + 10] = rotations[i * 4 + 2]!;
     packed[base + 11] = rotations[i * 4 + 3]!;
 
@@ -69,6 +69,12 @@ export function createGaussianBuffer(device: GPUDevice, data: GaussianSceneData)
     size: packed.byteLength,
     usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
-  device.queue.writeBuffer(gpuBuffer, 0, packed.buffer as ArrayBuffer, packed.byteOffset, packed.byteLength);
+  device.queue.writeBuffer(
+    gpuBuffer,
+    0,
+    packed.buffer as ArrayBuffer,
+    packed.byteOffset,
+    packed.byteLength,
+  );
   return gpuBuffer;
 }

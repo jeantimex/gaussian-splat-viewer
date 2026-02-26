@@ -24,15 +24,15 @@ export function parseSplat(buffer: ArrayBuffer): GaussianSceneData {
   const logScales = new Float32Array(N * 3);
   const rotations = new Float32Array(N * 4);
   const opacities = new Float32Array(N);
-  const shDC      = new Float32Array(N * 3);
+  const shDC = new Float32Array(N * 3);
 
   for (let i = 0; i < N; i++) {
     const base = i * SPLAT_ROW;
 
     // Position
-    positions[i * 3 + 0] = view.getFloat32(base + 0,  true);
-    positions[i * 3 + 1] = view.getFloat32(base + 4,  true);
-    positions[i * 3 + 2] = view.getFloat32(base + 8,  true);
+    positions[i * 3 + 0] = view.getFloat32(base + 0, true);
+    positions[i * 3 + 1] = view.getFloat32(base + 4, true);
+    positions[i * 3 + 2] = view.getFloat32(base + 8, true);
 
     // Scale: stored as exp(logScale) — take log to get log-space
     const sx = view.getFloat32(base + 12, true);

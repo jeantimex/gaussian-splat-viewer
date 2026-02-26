@@ -19,21 +19,23 @@ export async function loadScene(file: File): Promise<SceneData> {
   const u8 = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
 
   // PLY family
-  if (u8[0] === 0x70 && u8[1] === 0x6C && u8[2] === 0x79 && u8[3] === 0x0A) {
-    const headerText = new TextDecoder().decode(new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength)));
+  if (u8[0] === 0x70 && u8[1] === 0x6c && u8[2] === 0x79 && u8[3] === 0x0a) {
+    const headerText = new TextDecoder().decode(
+      new Uint8Array(buffer, 0, Math.min(4096, buffer.byteLength)),
+    );
     const subtype = detectPLYSubtype(headerText);
     if (subtype === 'compressed') return parseCompressedPLY(buffer);
-    if (subtype === 'gaussian')   return parseGaussianPLY(buffer);
+    if (subtype === 'gaussian') return parseGaussianPLY(buffer);
     return parsePointCloudPLY(buffer);
   }
 
   // SPZ (gzip magic) — Phase 7
-  if (u8[0] === 0x1F && u8[1] === 0x8B) {
+  if (u8[0] === 0x1f && u8[1] === 0x8b) {
     throw new Error('SPZ format is not yet supported (Phase 7).');
   }
 
   // KSPLAT magic "KSpl" — Phase 7
-  if (u8[0] === 0x4B && u8[1] === 0x53 && u8[2] === 0x70 && u8[3] === 0x6C) {
+  if (u8[0] === 0x4b && u8[1] === 0x53 && u8[2] === 0x70 && u8[3] === 0x6c) {
     throw new Error('KSPLAT format is not yet supported (Phase 7).');
   }
 

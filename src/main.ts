@@ -26,7 +26,7 @@ async function initWebGPU() {
 }
 
 function resize() {
-  canvas.width  = canvas.clientWidth  * devicePixelRatio;
+  canvas.width = canvas.clientWidth * devicePixelRatio;
   canvas.height = canvas.clientHeight * devicePixelRatio;
   gpuContext?.configure({ device: gpuDevice!, format: canvasFormat });
 }
@@ -36,12 +36,14 @@ function frame() {
   if (!gpuDevice || !gpuContext) return;
   const encoder = gpuDevice.createCommandEncoder();
   const pass = encoder.beginRenderPass({
-    colorAttachments: [{
-      view: gpuContext.getCurrentTexture().createView(),
-      clearValue: { r: 0.05, g: 0.05, b: 0.1, a: 1 },
-      loadOp: 'clear',
-      storeOp: 'store',
-    }],
+    colorAttachments: [
+      {
+        view: gpuContext.getCurrentTexture().createView(),
+        clearValue: { r: 0.05, g: 0.05, b: 0.1, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      },
+    ],
   });
   pass.end();
   gpuDevice.queue.submit([encoder.finish()]);
@@ -78,7 +80,7 @@ function showSceneInfo(scene: SceneData, parseMs: number, bufferBytes: number) {
     html += `<b>GPU buffer:</b> ${(bufferBytes / 1024 / 1024).toFixed(1)} MB\n`;
     html += `<b>First positions:</b>\n`;
     for (let i = 0; i < Math.min(3, scene.numGaussians); i++) {
-      html += `  [${i}] (${fmt(p[i*3]!)}, ${fmt(p[i*3+1]!)}, ${fmt(p[i*3+2]!)})\n`;
+      html += `  [${i}] (${fmt(p[i * 3]!)}, ${fmt(p[i * 3 + 1]!)}, ${fmt(p[i * 3 + 2]!)})\n`;
     }
   } else {
     const p = scene.positions;
@@ -90,7 +92,7 @@ function showSceneInfo(scene: SceneData, parseMs: number, bufferBytes: number) {
     html += `<b>Parse time:</b> ${parseMs.toFixed(1)} ms\n`;
     html += `<b>First positions:</b>\n`;
     for (let i = 0; i < Math.min(3, scene.numPoints); i++) {
-      html += `  [${i}] (${fmt(p[i*3]!)}, ${fmt(p[i*3+1]!)}, ${fmt(p[i*3+2]!)})\n`;
+      html += `  [${i}] (${fmt(p[i * 3]!)}, ${fmt(p[i * 3 + 1]!)}, ${fmt(p[i * 3 + 2]!)})\n`;
     }
   }
 
@@ -131,9 +133,12 @@ async function handleFile(file: File) {
 // ---------------------------------------------------------------------------
 
 function setupDragDrop() {
-  const prevent = (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); };
+  const prevent = (e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
-  window.addEventListener('dragover',  prevent);
+  window.addEventListener('dragover', prevent);
   window.addEventListener('dragenter', prevent);
   window.addEventListener('dragleave', prevent);
 
