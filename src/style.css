@@ -16,3 +16,54 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+/* ---- Drop hint ---------------------------------------------------------- */
+
+#drop-hint {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.4);
+  font-family: system-ui, sans-serif;
+  font-size: 1.25rem;
+  pointer-events: none;
+  user-select: none;
+  text-align: center;
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  padding: 2rem 3rem;
+  border-radius: 0.75rem;
+}
+
+/* ---- Info / error overlay ----------------------------------------------- */
+
+#overlay {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  white-space: pre;
+  pointer-events: none;
+  max-width: calc(100vw - 2rem);
+  overflow: hidden;
+}
+
+#overlay:empty {
+  display: none;
+}
+
+#overlay.info {
+  background: rgba(0, 0, 0, 0.65);
+  color: #c8e6c9;
+  border: 1px solid rgba(200, 230, 201, 0.25);
+}
+
+#overlay.error {
+  background: rgba(60, 0, 0, 0.75);
+  color: #ff8a80;
+  border: 1px solid rgba(255, 138, 128, 0.35);
+}
