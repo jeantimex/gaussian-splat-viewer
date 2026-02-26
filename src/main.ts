@@ -9,6 +9,11 @@ import {
   mat4LookAt,
   UNIFORMS_SIZE,
 } from './gpu/uniforms.ts';
+import {
+  createPreprocessPass,
+  encodePreprocessPass,
+  type PreprocessPass,
+} from './pipeline/preprocess.ts';
 
 // ---------------------------------------------------------------------------
 // WebGPU init
@@ -20,6 +25,7 @@ let gpuDevice: GPUDevice | null = null;
 let canvasFormat: GPUTextureFormat = 'bgra8unorm';
 let gpuContext: GPUCanvasContext | null = null;
 let uniformBuffer: GPUBuffer | null = null;
+let preprocessPass: PreprocessPass | null = null;
 
 async function initWebGPU() {
   if (!navigator.gpu) throw new Error('WebGPU is not supported in this browser.');
@@ -87,6 +93,7 @@ function showSceneInfo(scene: SceneData, parseMs: number, bufferBytes: number) {
     html += `<b>Parse time:</b> ${parseMs.toFixed(1)} ms\n`;
     html += `<b>GPU buffer:</b> ${(bufferBytes / 1024 / 1024).toFixed(1)} MB\n`;
     html += `<b>Uniform buffer:</b> ${UNIFORMS_SIZE} bytes\n`;
+    html += `<b>Preprocess shader:</b> ${preprocessPass ? '✓ compiled + dispatched' : '—'}\n`;
     html += `<b>First positions:</b>\n`;
     for (let i = 0; i < Math.min(3, scene.numGaussians); i++) {
       html += `  [${i}] (${fmt(p[i * 3]!)}, ${fmt(p[i * 3 + 1]!)}, ${fmt(p[i * 3 + 2]!)})\n`;
@@ -123,11 +130,25 @@ async function handleFile(file: File) {
     const parseMs = performance.now() - t0;
 
     let bufferBytes = 0;
-    if (scene.kind === 'gaussian' && gpuDevice) {
-      const buf = createGaussianBuffer(gpuDevice, scene);
+    if (scene.kind === 'gaussian' && gpuDevice && uniformBuffer) {
+      const gaussianBuffer = createGaussianBuffer(gpuDevice, scene);
       bufferBytes = scene.numGaussians * GAUSSIAN_STRIDE;
-      // Destroy immediately — Phase 1 just verifies the upload
-      buf.destroy();
+
+      // Update uniforms with correct Gaussian count
+      uploadPlaceholderCamera(scene.numGaussians);
+
+      // Build and run the preprocess pass
+      preprocessPass?.gaussDataBuffer.destroy();
+      preprocessPass = createPreprocessPass(
+        gpuDevice,
+        uniformBuffer,
+        gaussianBuffer,
+        scene.numGaussians,
+      );
+
+      const encoder = gpuDevice.createCommandEncoder();
+      encodePreprocessPass(encoder, preprocessPass);
+      gpuDevice.queue.submit([encoder.finish()]);
     }
 
     showSceneInfo(scene, parseMs, bufferBytes);
@@ -163,7 +184,7 @@ function setupDragDrop() {
 // ---------------------------------------------------------------------------
 
 /** Upload a simple look-at camera centred on the origin. Replaced in Phase 6. */
-function uploadPlaceholderCamera() {
+function uploadPlaceholderCamera(numGaussians = 0) {
   if (!gpuDevice || !uniformBuffer) return;
   const w = canvas.width || 1280;
   const h = canvas.height || 720;
@@ -182,7 +203,7 @@ function uploadPlaceholderCamera() {
     scaleModifier: 1.0,
     screenWidth: w,
     screenHeight: h,
-    numGaussians: 0,
+    numGaussians,
   });
 }
 
